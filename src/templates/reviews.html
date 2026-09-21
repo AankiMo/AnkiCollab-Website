@@ -18,23 +18,41 @@
               <div class="reviews-deck-control" id="deckFilterOptions" role="group" aria-label="Filter reviews by deck"></div>
               <input class="reviews-deck-search" id="deckFilterSearch" type="search" placeholder="Search decks" autocomplete="off" aria-label="Search decks">
             </div>
-            <label class="reviews-search">
-              <span class="sr-only">Search reviews</span>
-              <i class="fa fa-search" aria-hidden="true"></i>
-              <input id="reviewsSearch" type="search" placeholder="Search author or deck" autocomplete="off">
-            </label>
+            <div class="reviews-header-tools">
+              <label class="reviews-sort-label">
+                <i class="fa fa-sort" aria-hidden="true"></i>
+                <select id="reviewsSort" class="reviews-sort-select" aria-label="Sort reviews by">
+                  <option value="timestamp">Timestamp</option>
+                  <option value="author">Author</option>
+                  <option value="description">Description</option>
+                  <option value="notes">Notes affected</option>
+                </select>
+              </label>
+              <button id="reviewsSortDirection" class="reviews-sort-direction is-desc" type="button" aria-label="Sort direction: descending" title="Toggle sort direction">
+                <i class="fa fa-arrow-up" aria-hidden="true"></i>
+                <i class="fa fa-arrow-down" aria-hidden="true"></i>
+              </button>
+              <label class="reviews-search">
+                <span class="sr-only">Search reviews</span>
+                <i class="fa fa-search" aria-hidden="true"></i>
+                <input id="reviewsSearch" type="search" placeholder="Search author or deck" autocomplete="off">
+              </label>
+            </div>
           </header>
 
           <div class="reviews-workspace">
             <section class="reviews-list-panel" aria-label="Reviews list">
               <div class="reviews-list" id="reviewsList" role="listbox" aria-label="Pending reviews">
                 {% for commit in commits %}
-                <article class="review-row" role="option" tabindex="0" data-commit-id="{{ commit.id }}" data-author="{{ commit.user }}" data-deck="{{ commit.deck }}" data-info="{{ commit.commit_info | striptags }}" data-timestamp="{{ commit.timestamp }}">
+                <article class="review-row" role="option" tabindex="0" data-commit-id="{{ commit.id }}" data-author="{{ commit.user }}" data-deck="{{ commit.deck }}" data-info="{{ commit.commit_info | striptags }}" data-timestamp="{{ commit.timestamp }}" data-notes="{{ commit.notes_affected }}">
                   <span class="review-avatar" data-author="{{ commit.user }}" aria-hidden="true"></span>
                   <span class="review-row-content">
                     <span class="review-row-topline">
                       <strong class="review-author">{{ commit.user }}</strong>
-                      <time class="review-timestamp" title="{{ commit.timestamp }}">{{ commit.timestamp }}</time>
+                      <span class="review-row-meta">
+                        <span class="review-note-count">{{ commit.notes_affected }} note{% if commit.notes_affected != 1 %}s{% endif %}</span>
+                        <time class="review-timestamp" title="{{ commit.timestamp }}">{{ commit.timestamp }}</time>
+                      </span>
                     </span>
                     <span class="review-rationale">{{ commit.rationale or "No rationale provided" }}</span>
                     <span class="review-deck" title="{{ commit.deck }}">{{ commit.deck }}</span>

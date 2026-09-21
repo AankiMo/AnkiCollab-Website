@@ -54,6 +54,24 @@ pub async fn get_commit_info(
     ";
     let client = database::client(db_state).await?;
     let row = client.query_one(query, &[&commit_id]).await?;
+    let notes_affected: i64 = client
+        .query_one(
+            r#"
+            SELECT COUNT(DISTINCT note)
+            FROM (
+                SELECT note FROM fields WHERE commit = $1
+                UNION
+                SELECT note FROM tags WHERE commit = $1
+                UNION
+                SELECT note FROM card_deletion_suggestions WHERE commit = $1
+                UNION
+                SELECT note FROM note_move_suggestions WHERE commit = $1
+            ) affected_notes
+            "#,
+            &[&commit_id],
+        )
+        .await?
+        .get(0);
     let commit = CommitsOverview {
         id: row.get(0),
         rationale: get_string_from_rationale(row.get(1)).into(),
@@ -61,6 +79,7 @@ pub async fn get_commit_info(
         timestamp: row.get(3),
         deck: row.get(4),
         user: row.get(5),
+        notes_affected,
     };
     Ok(commit)
 }
@@ -119,28 +138,36 @@ pub async fn commits_review(
             WHERE c.deck IN (SELECT id FROM accessible)
         ),
 
+        commit_notes AS MATERIALIZED (
+            SELECT f.commit, f.note
+            FROM fields f
+            WHERE f.reviewed = false
+            AND f.commit IN (SELECT commit_id FROM relevant_commits)
+            UNION
+            SELECT t.commit, t.note
+            FROM tags t
+            WHERE t.reviewed = false
+            AND t.commit IN (SELECT commit_id FROM relevant_commits)
+            UNION
+            SELECT cds.commit, cds.note
+            FROM card_deletion_suggestions cds
+            WHERE cds.commit IN (SELECT commit_id FROM relevant_commits)
+            UNION
+            SELECT nms.commit, nms.note
+            FROM note_move_suggestions nms
+            WHERE nms.commit IN (SELECT commit_id FROM relevant_commits)
+        ),
+
         distinct_decks AS (
-            SELECT DISTINCT src.commit, n.deck
-            FROM (
-                SELECT f.commit, f.note
-                FROM fields f
-                WHERE f.reviewed = false
-                AND f.commit IN (SELECT commit_id FROM relevant_commits)
-                UNION ALL
-                SELECT t.commit, t.note
-                FROM tags t
-                WHERE t.reviewed = false
-                AND t.commit IN (SELECT commit_id FROM relevant_commits)
-                UNION ALL
-                SELECT cds.commit, cds.note
-                FROM card_deletion_suggestions cds
-                WHERE cds.commit IN (SELECT commit_id FROM relevant_commits)
-                UNION ALL
-                SELECT nms.commit, nms.note
-                FROM note_move_suggestions nms
-                WHERE nms.commit IN (SELECT commit_id FROM relevant_commits)
-            ) src
-            JOIN notes n ON n.id = src.note
+            SELECT DISTINCT cn.commit, n.deck
+            FROM commit_notes cn
+            JOIN notes n ON n.id = cn.note
+        ),
+
+        note_counts AS (
+            SELECT commit, COUNT(DISTINCT note) AS notes_affected
+            FROM commit_notes
+            GROUP BY commit
         ),
 
         deck_paths_agg AS (
@@ -157,11 +184,13 @@ pub async fn commits_review(
             c.info,
             TO_CHAR(c."timestamp", 'MM/DD/YYYY') AS formatted_timestamp,
             dpa.deck_paths,
-            COALESCE(u.username, 'Unknown') AS username
+            COALESCE(u.username, 'Unknown') AS username,
+            COALESCE(nc.notes_affected, 0) AS notes_affected
         FROM commits c
         JOIN relevant_commits rc ON c.commit_id = rc.commit_id
         LEFT JOIN users u ON u.id = c.user_id
         LEFT JOIN deck_paths_agg dpa ON dpa.commit = c.commit_id
+        LEFT JOIN note_counts nc ON nc.commit = c.commit_id
         ORDER BY c.commit_id DESC
     "#;
 
@@ -184,6 +213,7 @@ pub async fn commits_review(
                 timestamp: row.get(3),
                 deck: deck_string,
                 user: row.get(5),
+                notes_affected: row.get(6),
             }
         })
         .collect();

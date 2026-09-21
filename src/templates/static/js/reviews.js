@@ -6,6 +6,8 @@ $(function() {
     let selectedRow = null;
     let activeDeck = '';
     let request = null;
+    let sortKey = 'timestamp';
+    let sortDirection = 'desc';
 
     function escapeHtml(value) {
         return $('<div>').text(value || '').html();
@@ -29,6 +31,47 @@ $(function() {
             const deckMatch = !activeDeck || deck === activeDeck.toLowerCase() || deck.indexOf(activeDeck.toLowerCase() + '::') === 0;
             return deckMatch && (!query || author.indexOf(query) !== -1 || deck.indexOf(query) !== -1);
         });
+    }
+
+    function parseTimestamp(value) {
+        const parts = String(value || '').trim().split('/');
+        if (parts.length === 3) {
+            const month = parseInt(parts[0], 10);
+            const day = parseInt(parts[1], 10);
+            const year = parseInt(parts[2], 10);
+            if (!isNaN(month) && !isNaN(day) && !isNaN(year)) return year * 10000 + month * 100 + day;
+        }
+        return 0;
+    }
+
+    function sortValue(row) {
+        switch (sortKey) {
+            case 'author': return String(row.data('author') || '').toLowerCase();
+            case 'timestamp': return parseTimestamp(row.data('timestamp'));
+            case 'description': return String(row.data('info') || '').toLowerCase();
+            case 'notes': return Number(row.data('notes')) || 0;
+            default: return 0;
+        }
+    }
+
+    function updateSortDirectionButton() {
+        const button = $('#reviewsSortDirection');
+        button.toggleClass('is-asc', sortDirection === 'asc').toggleClass('is-desc', sortDirection === 'desc');
+        button.attr('aria-label', sortDirection === 'asc' ? 'Sort direction: ascending' : 'Sort direction: descending');
+    }
+
+    function applySort() {
+        const sorted = rows().toArray().sort(function(a, b) {
+            const valueA = sortValue($(a));
+            const valueB = sortValue($(b));
+            let comparison;
+            if (typeof valueA === 'number' && typeof valueB === 'number') comparison = valueA - valueB;
+            else comparison = String(valueA).localeCompare(String(valueB));
+            return sortDirection === 'asc' ? comparison : -comparison;
+        });
+        list.append(sorted);
+        updateSortDirectionButton();
+        refreshList();
     }
 
     function topLevelDeck(deck) {
@@ -150,9 +193,12 @@ $(function() {
     }
 
     buildDeckControl();
+    updateSortDirectionButton();
     refreshList();
     selectRow(filteredRows().first(), false);
 
+    $('#reviewsSort').on('change', function() { sortKey = $(this).val(); applySort(); });
+    $('#reviewsSortDirection').on('click', function() { sortDirection = sortDirection === 'asc' ? 'desc' : 'asc'; applySort(); });
     $('#reviewsSearch').on('input', refreshList);
     $('#deckFilterSearch').on('input', function() {
         const query = $(this).val().toLowerCase().trim();

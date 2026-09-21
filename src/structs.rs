@@ -64,6 +64,7 @@ pub struct CommitsOverview {
     pub timestamp: String,
     pub deck: String,
     pub user: String,
+    pub notes_affected: i64,
 }
 
 #[derive(Serialize)]
